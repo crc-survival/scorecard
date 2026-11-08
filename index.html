@@ -1,0 +1,1229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Colorectal Cancer Scorecard (research prototype)</title>
+  <!-- Revision 2026-11-06: the whole app runs in the browser. build_webapp.py writes the scorecard model and the
+       calculation functions into the script below (generated Index.html), so the same file can be opened locally
+       (double-click) and served by Apps Script (HTML file "index"). Edit Index_template.html, not Index.html.
+       2026-11-07: all visible text in full words (no abbreviations), notes for categories with imprecise points,
+       estimates below 1% shown as "<1%", result brought into view and chart sized to the screen on phones,
+       print button ("Print or save report") enabled once a result is shown, with a printed title and date.
+       Intended users stated in the banner (researchers; not for clinical decisions or for use by patients), and the
+       treatment points are explained as not being treatment effects (form, information window, disclaimer).
+       Results are labeled as overall survival counted from diagnosis, compared with observed survival of training
+       patients in the same risk group and with the same summary stage (table and dotted line), the score breakdown
+       lists the largest contributions first with each predictor's maximum, and an About section (not printed) gives
+       the intended users, study population, test-set results, score-to-survival formula, full points table,
+       limitations and privacy. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --primary: #4f46e5; --primary-hover: #4338ca; --bg-color: #f4f7f9; --card-bg: #ffffff;
+      --text-main: #1e293b; --text-muted: #64748b; --border-color: #e2e8f0; --blue-light: #c7d2fe;
+      --color-low: #10b981; --color-med: #f59e0b; --color-high: #ef4444;
+    }
+    body { font-family: 'Prompt', sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0 0 40px 0; }
+
+    .top-nav { display: flex; justify-content: space-between; align-items: center; padding: 16px 40px; background: #ffffff;
+               border-bottom: 1px solid var(--border-color); margin-bottom: 30px; }
+    .nav-brand { display: flex; align-items: center; gap: 12px; }
+    .brand-icon { width: 36px; height: 36px; background: var(--primary); color: white; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+    .brand-text h2 { margin: 0; font-size: 16px; font-weight: 700; }
+    .brand-text p { margin: 0; font-size: 12px; color: var(--text-muted); }
+    .btn-download { display: flex; align-items: center; gap: 8px; background: white; border: 1px solid #cbd5e1; color: var(--text-main);
+                    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: 'Prompt', sans-serif; }
+    .btn-download:hover { background: #f8fafc; }
+    .btn-download:disabled { opacity: 0.5; cursor: not-allowed; }
+    .print-header { display: none; }
+
+    .app-container { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+    .header { text-align: center; margin-bottom: 28px; }
+    .header h1 { margin: 0; font-size: 36px; font-weight: 700; }
+    .header h1 span { background: linear-gradient(90deg, #6366f1, #f43f5e, #f97316); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .header p { margin: 8px 0 0 0; color: var(--text-muted); font-size: 15px; }
+    .prototype-banner { max-width: 860px; margin: 0 auto 28px auto; padding: 12px 16px; border-radius: 12px; background: #fff7ed;
+                        border: 1px solid #fed7aa; color: #9a3412; font-size: 13px; line-height: 1.5; text-align: center; }
+
+    .layout-grid { display: flex; gap: 24px; align-items: flex-start; }
+    .input-panel { flex: 0 0 500px; background: var(--card-bg); border-radius: 20px; padding: 30px; border: 1px solid var(--border-color);
+                   box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
+    .quick-test-section { margin-bottom: 24px; }
+    .quick-test-section p { margin: 0 0 10px 0; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+    .caps { text-transform: uppercase; }
+    .btn-group { display: flex; gap: 12px; }
+    .btn-test { flex: 1; padding: 12px 8px; border-radius: 12px; font-size: 13px; cursor: pointer; font-family: 'Prompt', sans-serif; transition: all 0.2s;
+                display: flex; flex-direction: column; align-items: center; gap: 4px; font-weight: 600; }
+    .btn-test small { font-size: 11px; font-weight: 400; opacity: 0.85; }
+    .btn-test.g0 { border: 1px solid rgba(16,185,129,0.3); color: var(--color-low); background: rgba(16,185,129,0.05); }
+    .btn-test.g1 { border: 1px solid rgba(245,158,11,0.3); color: var(--color-med); background: rgba(245,158,11,0.05); }
+    .btn-test.g2 { border: 1px solid rgba(239,68,68,0.3); color: var(--color-high); background: rgba(239,68,68,0.05); }
+    .btn-test:hover { filter: brightness(0.97); }
+
+    .section-label { font-size: 14px; font-weight: 600; color: var(--primary); margin: 24px 0 16px 0; }
+    .section-hint { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: -8px 0 14px 0; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: end; }
+    .form-group.wide { grid-column: 1 / -1; }  /* selects with long labels use the full width */
+    .form-grid { grid-auto-flow: row dense; }
+    label { font-weight: 500; color: var(--text-muted); font-size: 13px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    select, input { font-family: 'Prompt', sans-serif; width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px;
+                    background-color: #ffffff; box-sizing: border-box; color: var(--text-main); }
+    select:focus, input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,0.15); }
+    .info-btn { background: none; border: none; color: #94a3b8; cursor: pointer; padding: 0; display: flex; align-items: center; }
+    .info-btn:hover { color: var(--primary); }
+    .btn-row { display: flex; gap: 12px; margin-top: 30px; }
+    .btn-submit { font-family: 'Prompt', sans-serif; flex: 1; padding: 14px; background-color: var(--primary); color: white; border: none;
+                  border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .btn-submit:hover { background-color: var(--primary-hover); }
+    .btn-submit:disabled { opacity: 0.7; cursor: not-allowed; }
+    .btn-reset { font-family: 'Prompt', sans-serif; flex: 0 0 100px; padding: 14px; background-color: #ffffff; color: var(--text-muted);
+                 border: 1px solid #cbd5e1; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; }
+
+    .result-panel { flex: 1; position: sticky; top: 30px; display: flex; flex-direction: column; min-height: 500px; }
+    .empty-state { position: absolute; inset: 0; border: 2px dashed #cbd5e1; border-radius: 16px; display: flex; flex-direction: column;
+                   align-items: center; justify-content: center; background: rgba(255,255,255,0.6); text-align: center; z-index: 10; }
+    .empty-icon { width: 60px; height: 60px; background: #eff6ff; color: var(--primary); border-radius: 50%; display: flex; align-items: center;
+                  justify-content: center; font-size: 28px; margin-bottom: 15px; }
+    .loading-state { display: none; text-align: center; margin: auto; color: var(--primary); font-weight: 500; font-size: 16px; }
+    .error-state { display: none; text-align: center; margin: auto; color: var(--color-high); font-weight: 500; font-size: 15px; background: #fef2f2;
+                   border: 1px solid rgba(239,68,68,0.3); border-radius: 12px; padding: 20px; }
+
+    .hero-risk-card { background: #1e213a; border-radius: 16px; padding: 32px; display: flex; align-items: center; gap: 30px; color: white;
+                      margin-bottom: 20px; box-shadow: 0 10px 25px -5px rgba(30,33,58,0.4); }
+    .hero-score-circle { width: 120px; height: 120px; border-radius: 50%; border: 8px solid #f59e0b; display: flex; flex-direction: column;
+                         align-items: center; justify-content: center; background: rgba(255,255,255,0.05); }
+    .score-label { font-size: 11px; color: #cbd5e1; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .score-value { font-size: 42px; font-weight: 700; color: white; line-height: 1; display: flex; align-items: baseline; gap: 4px; margin-top: 4px; }
+    .score-max { font-size: 14px; color: #94a3b8; font-weight: 500; }
+    .hero-risk-info { flex: 1; }
+    .risk-subtitle { font-size: 11px; color: #cbd5e1; font-weight: 600; letter-spacing: 1px; margin-bottom: 6px; text-transform: uppercase; }
+    .risk-title { font-size: 32px; font-weight: 700; margin: 0 0 12px 0; color: #f59e0b; line-height: 1.1; }
+    .risk-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; background: #f59e0b; color: white; font-size: 12px; font-weight: 600; margin-bottom: 12px; }
+    .risk-desc { font-size: 13px; color: #e2e8f0; margin: 0; line-height: 1.5; }
+    .warning-box { display: none; margin-bottom: 20px; padding: 12px 16px; border-radius: 12px; background: #fffbeb; border: 1px solid #fcd34d;
+                   color: #92400e; font-size: 13px; line-height: 1.5; }
+    .warning-box p { margin: 0; }
+    .warning-box p + p { margin-top: 8px; }
+
+    .result-white-box { background: white; border-radius: 16px; padding: 30px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+    .section-title-modern { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; margin-bottom: 20px; }
+    .survival-grid-modern { display: grid; gap: 12px; }
+    .surv-card-modern { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px 5px; text-align: center; }
+    .surv-month { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; }
+    .surv-val { font-size: 20px; font-weight: 700; color: var(--primary); }
+    .chart-note { font-size: 12px; color: var(--text-muted); margin: 8px 0 16px 0; line-height: 1.5; }
+    .section-sub { font-size: 12px; color: var(--text-muted); margin: -12px 0 14px 0; line-height: 1.5; }
+    .compare-box { margin-top: 18px; }
+    .compare-title { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+    .compare-table th { font-weight: 600; color: var(--text-muted); text-align: center; padding: 6px 4px; border-bottom: 1px solid var(--border-color); }
+    .compare-table td { padding: 2px 4px 8px 4px; border-bottom: 1px solid #f1f5f9; text-align: center; white-space: nowrap; color: var(--text-main); }
+    .compare-table tr.label-row td { text-align: left; white-space: normal; border-bottom: none; padding: 8px 4px 2px 4px; color: #475569; }
+    .compare-table .muted { color: var(--text-muted); font-size: 11.5px; }
+    .chart-legend i.dot { background: repeating-linear-gradient(90deg, #4f46e5 0 3px, transparent 3px 7px); }
+    .pts-max { font-size: 11px; color: var(--text-muted); margin-left: 6px; white-space: nowrap; }
+    .about-section { margin-top: 28px; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 20px;
+                     padding: 20px 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.03); }
+    .about-section summary { cursor: pointer; font-weight: 600; color: var(--primary); font-size: 15px; line-height: 1.5; }
+    .about-content { margin-top: 8px; font-size: 13.5px; line-height: 1.6; color: #334155; }
+    .about-content h4 { margin: 18px 0 6px 0; font-size: 14px; color: var(--text-main); }
+    .about-content p { margin: 0 0 6px 0; }
+    .about-content ul { margin: 4px 0; padding-left: 20px; }
+    .points-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px 24px; align-items: start; }
+    .about-points { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .about-points th, .about-points td { padding: 5px 6px; border-bottom: 1px solid #f1f5f9; text-align: left; }
+    .about-points th { background: #f8fafc; color: var(--text-main); font-weight: 600; }
+    .about-points th:last-child, .about-points td:last-child { text-align: right; width: 56px; }
+    .chart-box svg { display: block; width: 100%; height: auto; }
+    .chart-box .ax { font-size: 13px; fill: #64748b; font-family: 'Prompt', sans-serif; }
+    .chart-box .axt { font-size: 14px; fill: #475569; font-family: 'Prompt', sans-serif; }
+    .chart-legend { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: center; font-size: 12px; color: #475569; margin-top: 6px; }
+    .chart-legend i { display: inline-block; width: 22px; height: 3px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+    .chart-legend i.dash { background: repeating-linear-gradient(90deg, #94a3b8 0 6px, transparent 6px 10px); }
+    .breakdown-table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+    .breakdown-table th { background: #f8fafc; color: var(--text-muted); padding: 10px 12px; font-weight: 600; border-bottom: 2px solid #e2e8f0; }
+    .breakdown-table th:last-child, .breakdown-table td:last-child { text-align: right; }
+    .breakdown-table td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+    .breakdown-table td:last-child { white-space: nowrap; }
+    .pts-badge { background: #eff6ff; color: var(--primary); padding: 4px 8px; border-radius: 6px; font-weight: 700; font-size: 12px; display: inline-block; }
+    .disclaimer-box { margin-top: 20px; padding: 16px; background: #f8fafc; border-radius: 12px; font-size: 12px; color: #64748b; line-height: 1.6;
+                      border: 1px solid #e2e8f0; }
+
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+    .modal-content { background: #ffffff; border-radius: 16px; width: 100%; max-width: 560px; padding: 30px; position: relative; }
+    .modal-close { position: absolute; top: 20px; right: 20px; background: #f1f5f9; border: none; border-radius: 50%; width: 32px; height: 32px; font-size: 18px; color: #64748b; cursor: pointer; }
+    .modal-title { font-size: 20px; font-weight: 700; color: var(--primary); margin: 0 0 15px 0; border-bottom: 2px solid var(--blue-light); padding-bottom: 10px; }
+    .modal-body { font-size: 14.5px; color: #334155; line-height: 1.6; }
+
+    @media (max-width: 900px) {
+      .layout-grid { flex-direction: column; }
+      .input-panel { flex: none; width: auto; padding: 20px; }
+      .result-panel { position: relative; top: 0; width: 100%; }
+      .hero-risk-card { flex-direction: column; text-align: center; gap: 20px; }
+      .form-grid { grid-template-columns: 1fr; }
+      .btn-group { flex-direction: column; }
+      .top-nav { padding: 12px 16px; }
+      .about-section { padding: 16px 20px; }
+    }
+    @media (max-width: 480px) {
+      .survival-grid-modern { grid-template-columns: repeat(2, 1fr) !important; }
+    }
+    @media print {
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      .top-nav, .input-panel, .header { display: none !important; }
+      .print-header { display: block; margin: 0 0 14px 0; font-size: 13px; color: #334155; }
+      body { background-color: white !important; padding: 0; }
+      .layout-grid { display: block; }
+      .result-panel { width: 100%; position: static; }
+      .hero-risk-card { background: #1e213a !important; flex-direction: row !important; text-align: left !important; page-break-inside: avoid; }
+      .result-white-box { border: none; box-shadow: none; padding: 0; margin-top: 20px; }
+      .empty-state, .loading-state, .error-state { display: none !important; }
+      .breakdown-details summary { display: none !important; }
+      .about-section { display: none !important; }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<div class="top-nav">
+  <div class="nav-brand">
+    <div class="brand-icon">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+    </div>
+    <div class="brand-text">
+      <h2>Colorectal Cancer Survival Scorecard</h2>
+      <p>Research prototype accompanying the study manuscript</p>
+    </div>
+  </div>
+  <button type="button" class="btn-download" id="printBtn" onclick="printReport()" disabled
+          title="Opens the print window of the browser, where the report can also be saved as a file">Print or save report</button>
+</div>
+
+<div class="app-container">
+  <div class="print-header"><b>Colorectal Cancer Survival Scorecard</b> (research prototype). Printed <span id="printDate"></span>.</div>
+  <div class="header">
+    <h1>Colorectal Cancer <span>Scorecard</span></h1>
+    <p>Points-based risk groups and estimated overall survival from 12 to 48 months after diagnosis</p>
+  </div>
+  <div class="prototype-banner">
+    <b>Research prototype for researchers, not for clinical decisions or for use by patients.</b> The scorecard was developed on patients diagnosed with
+    colorectal cancer in 2018 in the Surveillance, Epidemiology, and End Results (SEER) cancer registries of the United States
+    and has not been externally validated. Surgery and chemotherapy are inputs, so it applies once the first course of
+    treatment is known. Estimates describe groups of similar patients, not an individual prognosis.
+  </div>
+
+  <div class="layout-grid">
+    <div class="input-panel">
+      <div class="quick-test-section">
+        <p><span class="caps">Example profiles</span> (most common values among training patients in each risk group)</p>
+        <div class="btn-group" id="exampleButtons"></div>
+      </div>
+      <form id="riskForm" onsubmit="handleFormSubmit(event)">
+        <div id="formSections"><div class="loading-state" style="display:block;">Loading the scorecard...</div></div>
+        <div class="btn-row">
+          <button type="submit" class="btn-submit" id="submitBtn" disabled>Run assessment</button>
+          <button type="button" class="btn-reset" onclick="resetForm()">Reset</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="result-panel">
+      <div class="empty-state" id="emptyState">
+        <div class="empty-icon">📊</div>
+        <h3 style="margin:0 0 10px 0;">Ready for assessment</h3>
+        <p style="margin:0; color:#64748b; font-size:14px; max-width:260px;">Complete the form or choose an example profile.</p>
+      </div>
+      <div class="loading-state" id="loadingState">Calculating...</div>
+      <div class="error-state" id="errorState">
+        Something went wrong.<br><span id="errorMessage" style="font-size:12px; color:#64748b;"></span>
+      </div>
+
+      <div id="resultContent" style="display:none;">
+        <div class="hero-risk-card">
+          <div class="hero-score-circle" id="heroCircle">
+            <span class="score-label">Total score</span>
+            <div class="score-value"><span id="display-score">0</span><span class="score-max" id="display-max">/ 100</span></div>
+          </div>
+          <div class="hero-risk-info">
+            <div class="risk-subtitle">Scorecard risk group</div>
+            <div class="risk-title" id="display-risk-title">Risk group</div>
+            <div class="risk-badge" id="display-risk-badge">Score --</div>
+            <p class="risk-desc" id="display-risk-desc"></p>
+          </div>
+        </div>
+        <div class="warning-box" id="warningBox"></div>
+
+        <div class="result-white-box">
+          <div class="section-title-modern">Estimated overall survival</div>
+          <p class="section-sub">Probability of being alive (death from any cause) at each time, counted from the date of
+            diagnosis, estimated from the score.</p>
+          <div class="survival-grid-modern" id="survivalCards"></div>
+          <div class="compare-box">
+            <div class="compare-title">For comparison: observed survival of training patients</div>
+            <table class="compare-table" id="compareTable"></table>
+          </div>
+          <div class="section-title-modern" style="margin-top: 32px;">Survival curve</div>
+          <div id="survivalChart" class="chart-box"></div>
+          <p class="chart-note">Solid line: estimate from the score (Cox model with the total score as its only predictor,
+            fitted to the training patients). Dashed and dotted lines: observed Kaplan&ndash;Meier survival of training
+            patients in the same risk group and with the same summary stage.</p>
+          <details class="breakdown-details" open>
+            <summary>Score breakdown (largest contributions first)</summary>
+            <table class="breakdown-table">
+              <thead><tr><th>Predictor</th><th>Entered value</th><th>Points</th></tr></thead>
+              <tbody id="breakdown-body"></tbody>
+            </table>
+          </details>
+        </div>
+        <div class="disclaimer-box">
+          Research prototype. Predictors are recorded at diagnosis or describe the first course of treatment as coded in the
+          registry, so the scorecard applies once the first course of treatment is known; time from diagnosis to treatment is
+          not used, and the points for treatment are not treatment effects. The tool has not been externally validated and is
+          not a substitute for clinical judgment.
+          <span id="modelVersion"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <details class="about-section" id="aboutSection">
+    <summary>About this scorecard: who it is for, what it estimates, how well it performed and the full points table</summary>
+    <div id="aboutContent" class="about-content"></div>
+  </details>
+</div>
+
+<div id="infoModal" class="modal-overlay" onclick="closeModalOutside(event)">
+  <div class="modal-content">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3 class="modal-title" id="modalTitle">Description</h3>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+// Scorecard model and calculations. Generated by build_webapp.py on 2026-11-07 from:
+//   outputs_v2/20261105_141907_240841/shap_scorecard_legacy/20261106_092408_941360/scorecard_web_model.json
+// Do not edit by hand: rerun notebook 6, export the JSON again and rerun build_webapp.py.
+const MODEL = {
+  "version": "2026-11-05 (20261106_092408_941360)",
+  "features": [
+    "Age",
+    "Derived_M",
+    "Chemotherapy",
+    "Surg_Prim_Site",
+    "Derived_T",
+    "CEA",
+    "nodes_positive",
+    "tumor_size_mm",
+    "Perineural_Invasion",
+    "Tumor_Deposits",
+    "Combind_Summary_Stage",
+    "First_malignant"
+  ],
+  "names": {
+    "Age": "Age",
+    "Derived_M": "Distant metastasis (M category)",
+    "Chemotherapy": "Chemotherapy",
+    "Surg_Prim_Site": "Primary site surgery",
+    "Derived_T": "Primary tumor (T category)",
+    "CEA": "Carcinoembryonic antigen (CEA)",
+    "nodes_positive": "Number of positive regional lymph nodes",
+    "tumor_size_mm": "Tumor size (millimeters)",
+    "Perineural_Invasion": "Perineural invasion",
+    "Tumor_Deposits": "Tumor deposits",
+    "Combind_Summary_Stage": "Summary stage",
+    "First_malignant": "First primary malignancy"
+  },
+  "levels": {
+    "Age": {
+      "2": "15–29 years",
+      "3": "30–39 years",
+      "4": "40–49 years",
+      "5": "50–59 years",
+      "6": "60–69 years",
+      "7": "70–79 years",
+      "8": "80–89 years",
+      "9": "90+ years"
+    },
+    "Derived_M": {
+      "1": "Not applicable: tumor, node and metastasis categories not derived",
+      "2": "M0: no distant metastasis",
+      "3": "M1: distant metastasis"
+    },
+    "Chemotherapy": {
+      "0": "None or unknown",
+      "1": "Yes"
+    },
+    "Surg_Prim_Site": {
+      "0": "No surgery",
+      "1": "Surgery of primary site"
+    },
+    "Derived_T": {
+      "1": "Not applicable: tumor, node and metastasis categories not derived",
+      "3": "T1: invades the submucosa",
+      "4": "T2: invades the muscularis propria",
+      "5": "T3: invades through the muscularis propria",
+      "6": "T4: penetrates the visceral peritoneum or invades adjacent organs",
+      "7": "Tis: carcinoma in situ or intramucosal carcinoma",
+      "8": "TX or T0: cannot be assessed, or no evidence of primary tumor"
+    },
+    "CEA": {
+      "1": "Normal",
+      "2": "Elevated",
+      "5": "Unknown, borderline or no result"
+    },
+    "Perineural_Invasion": {
+      "1": "Present",
+      "2": "Absent",
+      "3": "Unknown"
+    },
+    "Tumor_Deposits": {
+      "1": "Present",
+      "2": "Absent",
+      "3": "Unknown"
+    },
+    "Combind_Summary_Stage": {
+      "1": "Distant",
+      "2": "Localized",
+      "3": "Regional, direct extension and nodes",
+      "4": "Regional, direct extension only",
+      "5": "Regional, lymph nodes only"
+    },
+    "First_malignant": {
+      "0": "No",
+      "1": "Yes"
+    }
+  },
+  "continuous": [
+    "nodes_positive",
+    "tumor_size_mm"
+  ],
+  "rules": {
+    "Age": {
+      "cuts": null,
+      "points": {
+        "2": 7,
+        "3": 0,
+        "4": 1,
+        "5": 1,
+        "6": 6,
+        "7": 11,
+        "8": 17,
+        "9": 23
+      },
+      "unknown_points": 0
+    },
+    "Derived_M": {
+      "cuts": null,
+      "points": {
+        "1": 17,
+        "2": 0,
+        "3": 17
+      },
+      "unknown_points": 0
+    },
+    "Chemotherapy": {
+      "cuts": null,
+      "points": {
+        "0": 6,
+        "1": 0
+      },
+      "unknown_points": 0
+    },
+    "Surg_Prim_Site": {
+      "cuts": null,
+      "points": {
+        "0": 12,
+        "1": 0
+      },
+      "unknown_points": 0
+    },
+    "Derived_T": {
+      "cuts": null,
+      "points": {
+        "1": 1,
+        "3": 0,
+        "4": 0,
+        "5": 1,
+        "6": 8,
+        "7": 1,
+        "8": 3
+      },
+      "unknown_points": 0
+    },
+    "CEA": {
+      "cuts": null,
+      "points": {
+        "1": 0,
+        "2": 5,
+        "5": 4
+      },
+      "unknown_points": 0
+    },
+    "nodes_positive": {
+      "cuts": [
+        3,
+        6
+      ],
+      "points": {
+        "0": 0,
+        "1": 4,
+        "2": 10
+      },
+      "unknown_points": 0
+    },
+    "tumor_size_mm": {
+      "cuts": [
+        24,
+        46
+      ],
+      "points": {
+        "0": 0,
+        "1": 3,
+        "2": 5
+      },
+      "unknown_points": 0
+    },
+    "Perineural_Invasion": {
+      "cuts": null,
+      "points": {
+        "1": 3,
+        "2": 0,
+        "3": 4
+      },
+      "unknown_points": 0
+    },
+    "Tumor_Deposits": {
+      "cuts": null,
+      "points": {
+        "1": 3,
+        "2": 0,
+        "3": 3
+      },
+      "unknown_points": 0
+    },
+    "Combind_Summary_Stage": {
+      "cuts": null,
+      "points": {
+        "1": 3,
+        "2": 0,
+        "3": 3,
+        "4": 3,
+        "5": 3
+      },
+      "unknown_points": 0
+    },
+    "First_malignant": {
+      "cuts": null,
+      "points": {
+        "0": 4,
+        "1": 0
+      },
+      "unknown_points": 0
+    }
+  },
+  "cuts": [
+    26,
+    46
+  ],
+  "theoretical_max": 100,
+  "beta": 0.06904673936006046,
+  "times": [
+    12,
+    24,
+    36,
+    48
+  ],
+  "baseline": {
+    "12": 0.9876600210111782,
+    "24": 0.9765834660417695,
+    "36": 0.9645132509243445,
+    "48": 0.9520446276305886
+  },
+  "groupSurvival": {
+    "Low Risk": {
+      "12": 0.9707492878103408,
+      "24": 0.9389836372714859,
+      "36": 0.9083782701080347,
+      "48": 0.8708752463564591
+    },
+    "Intermediate Risk": {
+      "12": 0.857672120867973,
+      "24": 0.7642614102423468,
+      "36": 0.6518561749940004,
+      "48": 0.5628280014140904
+    },
+    "High Risk": {
+      "12": 0.49903686695189553,
+      "24": 0.2850188574617115,
+      "36": 0.18558209141527182,
+      "48": 0.12794790153475258
+    }
+  },
+  "groupCounts": {
+    "Low Risk": {
+      "n": 2852,
+      "events": 400
+    },
+    "Intermediate Risk": {
+      "n": 2018,
+      "events": 926
+    },
+    "High Risk": {
+      "n": 913,
+      "events": 805
+    }
+  },
+  "examples": {
+    "Low Risk": {
+      "values": {
+        "Age": 5,
+        "Derived_M": 2,
+        "Chemotherapy": 0,
+        "Surg_Prim_Site": 1,
+        "Derived_T": 5,
+        "CEA": 1,
+        "nodes_positive": 0,
+        "tumor_size_mm": 35,
+        "Perineural_Invasion": 2,
+        "Tumor_Deposits": 2,
+        "Combind_Summary_Stage": 2,
+        "First_malignant": 1
+      },
+      "score": 11.0,
+      "group": "Low Risk"
+    },
+    "Intermediate Risk": {
+      "values": {
+        "Age": 8,
+        "Derived_M": 2,
+        "Chemotherapy": 0,
+        "Surg_Prim_Site": 1,
+        "Derived_T": 5,
+        "CEA": 5,
+        "nodes_positive": 0,
+        "tumor_size_mm": 48,
+        "Perineural_Invasion": 2,
+        "Tumor_Deposits": 2,
+        "Combind_Summary_Stage": 2,
+        "First_malignant": 1
+      },
+      "score": 33.0,
+      "group": "Intermediate Risk"
+    },
+    "High Risk": {
+      "values": {
+        "Age": 8,
+        "Derived_M": 3,
+        "Chemotherapy": 1,
+        "Surg_Prim_Site": 0,
+        "Derived_T": 6,
+        "CEA": 2,
+        "nodes_positive": 0,
+        "tumor_size_mm": 55,
+        "Perineural_Invasion": 3,
+        "Tumor_Deposits": 3,
+        "Combind_Summary_Stage": 1,
+        "First_malignant": 1
+      },
+      "score": 74.0,
+      "group": "High Risk"
+    }
+  },
+  "notes": [
+    {
+      "features": [
+        "Age"
+      ],
+      "codes": {
+        "Age": "2"
+      },
+      "text": "Points for age 15–29 years are imprecise: only 38 training patients were in this age group. They receive more points than patients aged 30–59 years, although their survival was similar to that of patients aged 50–59 years."
+    },
+    {
+      "features": [
+        "Perineural_Invasion",
+        "Tumor_Deposits"
+      ],
+      "codes": {
+        "Perineural_Invasion": "3",
+        "Tumor_Deposits": "3"
+      },
+      "text": "Unknown perineural invasion or tumor deposits were recorded mainly for patients without surgery of the primary site, and \"Unknown\" receives as many points as \"Present\" or more. These points may not apply when the result is missing for another reason."
+    },
+    {
+      "features": [
+        "Derived_T",
+        "Derived_M"
+      ],
+      "codes": {
+        "Derived_T": "1",
+        "Derived_M": "1"
+      },
+      "text": "\"Not applicable\" means that the tumor, node and metastasis categories were not derived for the record (43 training patients). For distant metastasis it receives the same points as M1 (distant metastasis); enter the categories if they are known."
+    }
+  ],
+  "stageSurvival": {
+    "1": {
+      "n": 1058,
+      "events": 836,
+      "survival": {
+        "12": 0.6021891402250774,
+        "24": 0.41038098110635635,
+        "36": 0.2961778379231326,
+        "48": 0.2183939105175073
+      }
+    },
+    "2": {
+      "n": 2229,
+      "events": 503,
+      "survival": {
+        "12": 0.9350124504204764,
+        "24": 0.8901649467482925,
+        "36": 0.8394501969610699,
+        "48": 0.7902625044131462
+      }
+    },
+    "3": {
+      "n": 930,
+      "events": 344,
+      "survival": {
+        "12": 0.8790606214312366,
+        "24": 0.7940114184863449,
+        "36": 0.7192647994858188,
+        "48": 0.6524369216182836
+      }
+    },
+    "4": {
+      "n": 814,
+      "events": 251,
+      "survival": {
+        "12": 0.8856019668861159,
+        "24": 0.823498423050757,
+        "36": 0.7517527380655469,
+        "48": 0.7084966920320278
+      }
+    },
+    "5": {
+      "n": 752,
+      "events": 197,
+      "survival": {
+        "12": 0.9250982931340753,
+        "24": 0.8697358003594464,
+        "36": 0.8124945896176669,
+        "48": 0.745639133972158
+      }
+    }
+  },
+  "about": {
+    "population": {
+      "n": 7229,
+      "train_n": 5783,
+      "train_deaths": 2131,
+      "test_n": 1446,
+      "test_deaths": 533
+    },
+    "performance": {
+      "source": "20261106_114601_980119",
+      "time": 48,
+      "c_index": [
+        "0.799",
+        "0.781",
+        "0.819"
+      ],
+      "ibs": "0.1260",
+      "c_tnm": "0.717",
+      "c_age_tnm": "0.777",
+      "c_cox_all": "0.801",
+      "observed_expected": [
+        "1.01",
+        "0.94",
+        "1.08"
+      ],
+      "groups": [
+        {
+          "name": "Low Risk",
+          "n": 706,
+          "deaths": 95,
+          "observed": 87.3,
+          "predicted": 85.2
+        },
+        {
+          "name": "Intermediate Risk",
+          "n": 513,
+          "deaths": 239,
+          "observed": 55.5,
+          "predicted": 59.4
+        },
+        {
+          "name": "High Risk",
+          "n": 227,
+          "deaths": 199,
+          "observed": 13.0,
+          "predicted": 12.0
+        }
+      ]
+    }
+  }
+};
+const GROUPS = ['Low Risk', 'Intermediate Risk', 'High Risk'];
+
+function groupRanges_() {
+  const c = MODEL.cuts;
+  return [{name: GROUPS[0], min: 0, max: c[0] - 1},
+          {name: GROUPS[1], min: c[0], max: c[1] - 1},
+          {name: GROUPS[2], min: c[1], max: MODEL.theoretical_max}];
+}
+
+function getModelSpec() {
+  const options = {};
+  MODEL.features.forEach(function (feature) {
+    if (MODEL.rules[feature].cuts === null) {
+      options[feature] = Object.keys(MODEL.rules[feature].points)
+          .sort(function (a, b) { return Number(a) - Number(b); })
+          .map(function (code) { return {value: code, label: MODEL.levels[feature][code]}; });
+    }
+  });
+  // Full points table: categories in code order; whole-number intervals for the continuous predictors.
+  const pointsTable = MODEL.features.map(function (feature) {
+    const rule = MODEL.rules[feature];
+    let rows;
+    if (rule.cuts === null) {
+      rows = Object.keys(rule.points).sort(function (a, b) { return Number(a) - Number(b); })
+          .map(function (code) { return {code: code, label: MODEL.levels[feature][code], points: rule.points[code]}; });
+    } else {
+      rows = rule.cuts.concat([null]).map(function (cut, i) {
+        const low = i === 0 ? 0 : rule.cuts[i - 1] + 1;
+        return {code: String(i), label: cut === null ? low + ' or more' : low + '–' + cut, points: rule.points[String(i)]};
+      });
+    }
+    return {feature: feature, name: MODEL.names[feature], rows: rows};
+  });
+  return {version: MODEL.version, features: MODEL.features, names: MODEL.names, options: options,
+          continuous: MODEL.continuous, times: MODEL.times, theoreticalMax: MODEL.theoretical_max,
+          groups: groupRanges_(), groupCounts: MODEL.groupCounts, examples: MODEL.examples,
+          pointsTable: pointsTable, beta: MODEL.beta, baseline: MODEL.baseline, about: MODEL.about};
+}
+
+function pointsKey_(feature, raw) {
+  const name = MODEL.names[feature];
+  if (raw === undefined || raw === null || String(raw).trim() === '') throw new Error('Please complete: ' + name);
+  const value = Number(raw);
+  if (!Number.isFinite(value)) throw new Error('Invalid value: ' + name);
+  const rule = MODEL.rules[feature];
+  if (rule.cuts !== null) {
+    if (value < 0 || !Number.isInteger(value)) throw new Error('Enter a whole number of 0 or more: ' + name);
+    // Same intervals as the scorecard: (-inf, cut1], (cut1, cut2], (cut2, inf).
+    return {key: String(rule.cuts.filter(function (cut) { return value > cut; }).length), text: String(value)};
+  }
+  const key = String(value);
+  if (!Object.prototype.hasOwnProperty.call(rule.points, key)) throw new Error('Unsupported category: ' + name);
+  return {key: key, text: MODEL.levels[feature][key]};
+}
+
+function calculateRisk(formData) {
+  let score = 0;
+  const breakdown = [];
+  MODEL.features.forEach(function (feature) {
+    const entry = pointsKey_(feature, formData[feature]);
+    const points = MODEL.rules[feature].points[entry.key];
+    score += points;
+    const maxPoints = Math.max.apply(null, Object.keys(MODEL.rules[feature].points).map(function (k) { return MODEL.rules[feature].points[k]; }));
+    breakdown.push({feature: feature, name: MODEL.names[feature], value: entry.text, points: points, maxPoints: maxPoints});
+  });
+  const groupIndex = score < MODEL.cuts[0] ? 0 : (score < MODEL.cuts[1] ? 1 : 2);
+  const relativeHazard = Math.exp(MODEL.beta * score);
+  const warnings = [];  // entries to check
+  if (formData.Derived_M !== undefined && formData.Combind_Summary_Stage !== undefined &&
+      String(Number(formData.Derived_M)) === '3' &&
+      String(Number(formData.Combind_Summary_Stage)) !== '1') {
+    warnings.push('Distant metastasis (M1) was always recorded with a distant summary stage in the study data; please check these two entries.');
+  }
+  if (formData.tumor_size_mm !== undefined && Number(formData.tumor_size_mm) > 200) {
+    warnings.push('Tumor sizes above 200 millimeters were very rare in the study data (6 of 5,760 training patients with a recorded size); please check the entry.');
+  }
+  const notes = [];  // categories whose points are imprecise or reflect how the registry records data
+  MODEL.notes.forEach(function (note) {
+    if (note.features.some(function (f) { return formData[f] !== undefined && String(Number(formData[f])) === note.codes[f]; })) {
+      notes.push(note.text);
+    }
+  });
+  // Observed survival of training patients with the same summary stage, for comparison.
+  let stage = null;
+  const stageCode = formData.Combind_Summary_Stage === undefined ? null : String(Number(formData.Combind_Summary_Stage));
+  if (MODEL.stageSurvival && stageCode !== null && MODEL.stageSurvival[stageCode]) {
+    const s = MODEL.stageSurvival[stageCode];
+    stage = {label: MODEL.levels.Combind_Summary_Stage[stageCode], n: s.n, events: s.events,
+             survival: MODEL.times.map(function (t) { return 100 * s.survival[String(t)]; })};
+  }
+  return {
+    score: score, maxScore: MODEL.theoretical_max, groupIndex: groupIndex, group: groupRanges_()[groupIndex],
+    times: MODEL.times,
+    survival: MODEL.times.map(function (t) { return 100 * Math.pow(MODEL.baseline[String(t)], relativeHazard); }),
+    groupSurvival: MODEL.times.map(function (t) { return 100 * MODEL.groupSurvival[GROUPS[groupIndex]][String(t)]; }),
+    groupCount: MODEL.groupCounts[GROUPS[groupIndex]], stage: stage,
+    breakdown: breakdown, warnings: warnings, notes: notes
+  };
+}
+</script>
+<script>
+  const GROUP_COLORS = ['#10b981', '#f59e0b', '#ef4444'];
+  const GROUP_TEXT = [
+    'Lower risk than the other score groups in the study cohort.',
+    'Intermediate risk relative to the other score groups in the study cohort.',
+    'Higher risk than the other score groups in the study cohort.'
+  ];
+  // Form sections and option order; variables not listed here appear under "Other predictors".
+  const SECTIONS = [
+    ['1. Patient and laboratory', ['Age', 'Sex', 'Race', 'Household_income', 'Rural-Urban', 'CEA', 'First_malignant']],
+    ['2. Tumor and pathology', ['Primary_Site', 'Diagnostic_Confirmation', 'tumor_size_mm', 'Perineural_Invasion', 'Tumor_Deposits']],
+    ['3. Stage and metastasis', ['Combind_Summary_Stage', 'Derived_T', 'Derived_N', 'Derived_M', 'nodes_positive', 'nodes_positive_status',
+                                 'Combined_Mets_at_DX-liver', 'Mets_at_DX-lung', 'Mets_at_DX-Distant_LN', 'Mets_at_DX-Other']],
+    ['4. First course of treatment', ['Surg_Prim_Site', 'Chemotherapy', 'Radiation', 'Surg/Rad_Seq']]
+  ];
+  // Short notes shown under a section title.
+  const SECTION_HINTS = {
+    '4. First course of treatment': 'Enter the treatment received. These points describe which patients received treatment ' +
+        'in the registry, not the effect of treatment, so the scorecard cannot be used to compare treatment options.'
+  };
+  const OPTION_ORDER = { 'Combind_Summary_Stage': ['2', '4', '5', '3', '1'], 'Derived_T': ['7', '3', '4', '5', '6', '8', '1'] };
+  // Information windows. All text is written in full words; codes of the staging system are explained where used.
+  const NOT_DERIVED_INFO = '<li><b>Not applicable:</b> the tumor (T), node (N) and metastasis (M) categories were not derived for the record.</li>';
+  const INFO = {
+    'Combind_Summary_Stage': {
+      title: 'Summary stage',
+      content: `<ul>
+        <li><b>Localized:</b> confined to the colon or rectum.</li>
+        <li><b>Regional, direct extension only:</b> grown into adjacent tissues or organs, regional lymph nodes not involved.</li>
+        <li><b>Regional, lymph nodes only:</b> spread to regional lymph nodes only.</li>
+        <li><b>Regional, direct extension and nodes:</b> both of the above.</li>
+        <li><b>Distant:</b> spread to distant organs or distant lymph nodes.</li></ul>`
+    },
+    'Derived_T': {
+      title: 'Primary tumor (T category)',
+      content: `<p>Categories of the American Joint Committee on Cancer staging system, 8th edition.</p><ul>
+        <li><b>Tis:</b> carcinoma in situ or intramucosal carcinoma (lamina propria, not through the muscularis mucosae).</li>
+        <li><b>T1:</b> invades the submucosa.</li>
+        <li><b>T2:</b> invades the muscularis propria.</li>
+        <li><b>T3:</b> invades through the muscularis propria into pericolorectal tissues.</li>
+        <li><b>T4:</b> penetrates the visceral peritoneum (T4a) or invades or adheres to adjacent organs or structures (T4b).</li>
+        <li><b>TX or T0:</b> primary tumor cannot be assessed, or no evidence of primary tumor.</li>
+        ${NOT_DERIVED_INFO}</ul>`
+    },
+    'nodes_positive': {
+      title: 'Number of positive regional lymph nodes',
+      content: `<p>Number of regional lymph nodes containing tumor, as recorded in the registry.</p>
+        <ul><li>If no regional lymph nodes were examined, enter <b>0</b>: these patients were coded with no positive nodes
+        in the study data and receive 0 node points (their observed and predicted risks agreed in the study).</li>
+        <li>Scorecard intervals: 0&ndash;3, 4&ndash;6 and 7 or more, the node-count boundaries of the American Joint Committee
+        on Cancer categories N1 (1&ndash;3 positive nodes), N2a (4&ndash;6) and N2b (7 or more).</li></ul>`
+    },
+    'tumor_size_mm': {
+      title: 'Tumor size (millimeters)',
+      content: `<p>Largest dimension of the primary tumor in millimeters, as recorded in the registry.</p>
+        <ul><li>Scorecard intervals: 24 millimeters or less, 25&ndash;46 millimeters and 47 millimeters or more.</li></ul>`
+    },
+    'Chemotherapy': {
+      title: 'First course of treatment',
+      content: `<p>Chemotherapy and surgery of the primary site describe the <b>first course of treatment</b> recorded in the
+        registry. They are known only after diagnosis, so the scorecard is meant for patients whose first course of treatment
+        is known. Patients who die soon after diagnosis may never start planned treatment.</p>
+        <p><b>The points are not treatment effects.</b> Whether a patient is treated depends on age, other illnesses and
+        fitness, and the registry has no information on other illnesses or fitness. The points therefore describe the
+        patients who did or did not receive treatment in the study data; changing these entries does not show what a
+        different treatment would achieve.</p>`
+    },
+    'Derived_M': {
+      title: 'Distant metastasis (M category)',
+      content: `<ul>
+        <li><b>M0:</b> no distant metastasis.</li>
+        <li><b>M1:</b> metastasis to distant organs (for example liver or lung), distant lymph nodes or the peritoneum.</li>
+        ${NOT_DERIVED_INFO}</ul>`
+    }
+  };
+  INFO['Surg_Prim_Site'] = INFO['Chemotherapy'];  // same window from both treatment fields
+  let SPEC = null, lastResult = null;
+
+  // Estimates below 1% are shown as "<1%": one decimal near zero would suggest more precision than the data give.
+  function formatPercent(value) { return value < 1 ? '<1%' : value.toFixed(1) + '%'; }
+
+  // On narrow screens the result is below the long form: bring it into view after each calculation.
+  function scrollToResult() {
+    if (window.matchMedia('(max-width: 900px)').matches) {
+      document.querySelector('.result-panel').scrollIntoView({behavior: 'smooth', block: 'start'});
+    }
+  }
+
+  // Print: the browser's print window, which can also save the report as a file.
+  function preparePrint() {
+    document.getElementById('printDate').innerText = new Date().toLocaleString('en-GB',
+        {day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'});
+    if (lastResult) drawSurvivalChart(lastResult, 640);  // same drawing on paper whatever the screen width
+  }
+  function printReport() { preparePrint(); window.print(); }
+  window.addEventListener('beforeprint', preparePrint);
+  window.addEventListener('afterprint', () => { if (lastResult) drawSurvivalChart(lastResult); });
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (lastResult && document.getElementById('resultContent').style.display !== 'none') drawSurvivalChart(lastResult);
+    }, 150);
+  });
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+  }
+  function openModal(feature) {
+    const data = INFO[feature];
+    if (!data) return;
+    document.getElementById('modalTitle').innerText = data.title;
+    document.getElementById('modalBody').innerHTML = data.content;
+    document.getElementById('infoModal').style.display = 'flex';
+  }
+  function closeModal() { document.getElementById('infoModal').style.display = 'none'; }
+  function closeModalOutside(event) { if (event.target === document.getElementById('infoModal')) closeModal(); }
+
+  function fieldHtml(feature) {
+    const name = escapeHtml(SPEC.names[feature] || feature);
+    const info = INFO[feature] ? `<button type="button" class="info-btn" aria-label="About ${name}" onclick="openModal('${feature}')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></button>` : '';
+    if (SPEC.continuous.indexOf(feature) >= 0) {
+      return `<div class="form-group"><label>${name}${info}</label>
+        <input type="number" name="${escapeHtml(feature)}" step="1" min="0" required placeholder="Whole number, for example 0"></div>`;
+    }
+    let codes = SPEC.options[feature].map(o => o.value);
+    if (OPTION_ORDER[feature]) codes = OPTION_ORDER[feature].filter(c => codes.indexOf(c) >= 0).concat(codes.filter(c => OPTION_ORDER[feature].indexOf(c) < 0));
+    const labels = {};
+    SPEC.options[feature].forEach(o => { labels[o.value] = o.label; });
+    const options = codes.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(labels[c])}</option>`).join('');
+    const wide = SPEC.options[feature].some(o => String(o.label).length > 24) ? ' wide' : '';
+    return `<div class="form-group${wide}"><label>${name}${info}</label>
+      <select name="${escapeHtml(feature)}" required><option value="" disabled selected>-- Select --</option>${options}</select></div>`;
+  }
+
+  function buildForm(spec) {
+    SPEC = spec;
+    const used = new Set();
+    let html = '';
+    SECTIONS.concat([['Other predictors', spec.features]]).forEach(([title, members]) => {
+      const fields = spec.features.filter(f => members.indexOf(f) >= 0 && !used.has(f));
+      if (!fields.length) return;
+      fields.forEach(f => used.add(f));
+      const hint = SECTION_HINTS[title] ? `<p class="section-hint">${escapeHtml(SECTION_HINTS[title])}</p>` : '';
+      html += `<div class="section-label">${escapeHtml(title)}</div>${hint}<div class="form-grid">${fields.map(fieldHtml).join('')}</div>`;
+    });
+    document.getElementById('formSections').innerHTML = html;
+    document.getElementById('exampleButtons').innerHTML = spec.groups.map((g, i) =>
+      `<button type="button" class="btn-test g${i}" onclick="fillExample('${escapeHtml(g.name)}')">${escapeHtml(g.name)}
+         <small>(Score ${g.min}&ndash;${g.max})</small></button>`).join('');
+    document.getElementById('display-max').innerText = '/ ' + spec.theoreticalMax;
+    document.getElementById('modelVersion').innerText = 'Model version ' + spec.version + '.';
+    document.getElementById('submitBtn').disabled = false;
+    buildAbout(spec);
+  }
+
+  // About section: intended users, outcome, study population, test-set results, how the score becomes survival,
+  // the full points table, limitations and privacy. Numbers come from the model built by build_webapp.py.
+  function buildAbout(spec) {
+    const fmt = n => Number(n).toLocaleString('en-US');
+    const pct = v => Number(v).toFixed(1) + '%';
+    const about = spec.about || {}, pop = about.population, perf = about.performance;
+    let h = '<h4>Who it is for</h4><p>Researchers studying prognosis in colorectal cancer. After external validation, it may ' +
+      'help clinicians discuss prognosis with patients whose first course of treatment is known. It is not for clinical ' +
+      'decisions, for choosing or comparing treatments, or for use by patients.</p>';
+    h += '<h4>What it estimates</h4><p>Overall survival: the probability of being alive (death from any cause) at ' +
+      spec.times.join(', ').replace(/, (\d+)$/, ' and $1') + ' months after the date of diagnosis, for groups of patients like ' +
+      'the one entered. The total score is converted to survival with a Cox regression that has the score as its only ' +
+      'predictor, fitted to the training patients.</p>';
+    if (pop) {
+      h += `<h4>Study population</h4><p>${fmt(pop.n)} patients diagnosed with colorectal cancer in 2018 in the Surveillance, ` +
+        'Epidemiology, and End Results (SEER) cancer registries of the United States, followed from diagnosis until death or ' +
+        'the end of 2022. Of the 10,155 patients identified, 2,926 were excluded because of missing information. The patients ' +
+        `were split at random into a training set (${fmt(pop.train_n)} ` +
+        `patients, ${fmt(pop.train_deaths)} deaths), used to build the scorecard, and a test set (${fmt(pop.test_n)} patients, ` +
+        `${fmt(pop.test_deaths)} deaths), used only to check it.</p>`;
+    }
+    if (perf) {
+      h += '<h4>Performance in the test set</h4><ul>' +
+        `<li>Ranking of patients by risk (concordance index; 1 is perfect, 0.5 is chance): ${perf.c_index[0]} (95% confidence ` +
+        `interval ${perf.c_index[1]} to ${perf.c_index[2]}), against ${perf.c_tnm} for a Cox regression with the tumor, node ` +
+        `and metastasis categories and ${perf.c_age_tnm} with age group added, and similar to a Cox regression with all 26 ` +
+        `candidate predictors (${perf.c_cox_all}).</li>` +
+        `<li>Prediction error from 12 to ${perf.time} months (integrated Brier score; lower is better): ${perf.ibs}.</li>` +
+        `<li>Calibration at ${perf.time} months: the observed risk of death was ${perf.observed_expected[0]} times the predicted ` +
+        `risk (95% confidence interval ${perf.observed_expected[1]} to ${perf.observed_expected[2]}).</li>` +
+        `<li>Observed (predicted) survival at ${perf.time} months by risk group: ` +
+        perf.groups.map(g => `${escapeHtml(g.name)} ${pct(g.observed)} (${pct(g.predicted)}), ${fmt(g.n)} patients`).join('; ') +
+        '.</li></ul>';
+    }
+    const baseline = spec.times.map(t => Number(spec.baseline[String(t)]).toFixed(4));
+    h += '<h4>From score to survival</h4><p>Survival at each time is the baseline survival at that time raised to the power ' +
+      `e<sup>${Number(spec.beta).toFixed(4)} × total score</sup>, with baseline survival ${baseline.join(', ')} at ` +
+      `${spec.times.join(', ')} months (rounded here; the page uses the unrounded values). Risk groups: ` +
+      spec.groups.map(g => `${escapeHtml(g.name)} ${g.min}–${g.max} points`).join(', ') +
+      ' (cut-offs chosen in the training set).</p>';
+    h += `<h4>Points table</h4><p>The total score is the sum of the points of the ${spec.features.length} predictors ` +
+      `(0 to ${spec.theoreticalMax}).</p><div class="points-grid">` + spec.pointsTable.map(block => {
+        let rows = block.rows;
+        const order = OPTION_ORDER[block.feature];
+        if (order) rows = order.map(c => rows.find(r => r.code === c)).filter(Boolean).concat(rows.filter(r => order.indexOf(r.code) < 0));
+        return `<table class="about-points"><thead><tr><th>${escapeHtml(block.name)}</th><th>Points</th></tr></thead><tbody>` +
+          rows.map(r => `<tr><td>${escapeHtml(r.label)}</td><td>${r.points}</td></tr>`).join('') + '</tbody></table>';
+      }).join('') + '</div>';
+    h += '<h4>Main limitations</h4><ul>' +
+      '<li>Not externally validated. It was developed on registry data from the United States for patients diagnosed in ' +
+      '2018; treatment and survival may differ in other countries and periods.</li>' +
+      '<li>The registry has no information on other illnesses or fitness, so the points for treatment describe who was ' +
+      'treated and are not treatment effects.</li>' +
+      '<li>Points for small categories are imprecise, and some points reflect how the registry records data (age 15–29 ' +
+      'years; unknown perineural invasion or tumor deposits; "Not applicable" tumor, node and metastasis categories). A note ' +
+      'is shown when these are entered.</li>' +
+      `<li>All ${spec.features.length} predictors must be entered; the scorecard cannot handle missing entries.</li>` +
+      '<li>Estimates describe groups of similar patients; the outcome of an individual patient can differ.</li></ul>';
+    h += '<h4>Privacy</h4><p>Entries stay in this page: nothing is sent to a server or stored, and the entries are lost when ' +
+      'the page is closed or reloaded.</p>';
+    h += '<h4>Reference</h4><p>The study manuscript is under review; the full reference will be added after publication.</p>';
+    document.getElementById('aboutContent').innerHTML = h;
+  }
+
+  function fillExample(groupName) {
+    const example = SPEC.examples[groupName];
+    if (!example) return;
+    const form = document.getElementById('riskForm');
+    Object.entries(example.values).forEach(([key, value]) => { form.elements.namedItem(key).value = String(value); });
+    document.getElementById('submitBtn').click();
+  }
+
+  function resetForm() {
+    document.getElementById('riskForm').reset();
+    lastResult = null;
+    document.getElementById('printBtn').disabled = true;
+    document.getElementById('survivalChart').innerHTML = '';
+    document.getElementById('breakdown-body').innerHTML = '';
+    ['resultContent', 'loadingState', 'errorState'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+    document.getElementById('emptyState').style.display = 'flex';
+    document.getElementById('submitBtn').disabled = false;
+  }
+
+  function handleFormSubmit(event) {
+    event.preventDefault();
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('resultContent').style.display = 'none';
+    document.getElementById('errorState').style.display = 'none';
+    document.getElementById('loadingState').style.display = 'block';
+    document.getElementById('printBtn').disabled = true;
+    const submitBtn = document.getElementById('submitBtn');
+    submitBtn.disabled = true;
+    const data = Object.fromEntries(new FormData(document.getElementById('riskForm')).entries());
+    setTimeout(() => {
+      let result;
+      try { result = calculateRisk(data); } catch (error) { submitBtn.disabled = false; showError(error); return; }
+      submitBtn.disabled = false;
+      showResult(result);
+    }, 30);
+  }
+
+  function showError(error) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('resultContent').style.display = 'none';
+    document.getElementById('errorState').style.display = 'block';
+    document.getElementById('errorMessage').innerText = (error && error.message) ? error.message : String(error);
+    lastResult = null;
+    document.getElementById('printBtn').disabled = true;
+    scrollToResult();
+  }
+
+  function showResult(result) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('resultContent').style.display = 'block';
+    const color = GROUP_COLORS[result.groupIndex];
+    document.getElementById('display-score').innerText = result.score;
+    document.getElementById('heroCircle').style.borderColor = color;
+    const title = document.getElementById('display-risk-title');
+    title.innerText = result.group.name;
+    title.style.color = color;
+    const badge = document.getElementById('display-risk-badge');
+    badge.innerText = 'Score ' + result.group.min + '–' + result.group.max;
+    badge.style.background = color;
+    document.getElementById('display-risk-desc').innerText = GROUP_TEXT[result.groupIndex];
+
+    // Entries to check first, then notes on categories with imprecise points; one paragraph each.
+    const warningBox = document.getElementById('warningBox');
+    const messages = result.warnings.concat(result.notes || []);
+    warningBox.style.display = messages.length ? 'block' : 'none';
+    warningBox.innerHTML = messages.map(m => '<p>' + escapeHtml(m) + '</p>').join('');
+
+    const cards = document.getElementById('survivalCards');
+    cards.style.gridTemplateColumns = 'repeat(' + result.times.length + ', 1fr)';
+    cards.innerHTML = result.times.map((t, i) => `<div class="surv-card-modern"><div class="surv-month">${t} months</div>
+      <div class="surv-val">${formatPercent(result.survival[i])}</div></div>`).join('');
+
+    // Observed survival of training patients in the same risk group and with the same summary stage.
+    const fmt = n => Number(n).toLocaleString('en-US');
+    const compare = [['Same risk group: ' + result.group.name, result.groupCount, result.groupSurvival]];
+    if (result.stage) compare.push(['Same summary stage: ' + result.stage.label, result.stage, result.stage.survival]);
+    document.getElementById('compareTable').innerHTML =
+      '<thead><tr>' + result.times.map(t => `<th>${t} months</th>`).join('') + '</tr></thead><tbody>' +
+      compare.map(([label, count, values]) => `<tr class="label-row"><td colspan="${result.times.length}">${escapeHtml(label)} ` +
+        `<span class="muted">(${fmt(count.n)} patients, ${fmt(count.events)} deaths)</span></td></tr>` +
+        '<tr>' + values.map(v => `<td>${formatPercent(v)}</td>`).join('') + '</tr>').join('') + '</tbody>';
+
+    // Largest contributions first (ties keep the form order); each with the most points the predictor can give.
+    document.getElementById('breakdown-body').innerHTML = result.breakdown.slice().sort((a, b) => b.points - a.points).map(row =>
+      `<tr><td style="color:#64748b;">${escapeHtml(row.name)}</td><td style="font-weight:500;">${escapeHtml(row.value)}</td>
+       <td><span class="pts-badge">+${row.points}</span><span class="pts-max">of ${row.maxPoints}</span></td></tr>`).join('');
+
+    lastResult = result;
+    drawSurvivalChart(result);
+    document.getElementById('printBtn').disabled = false;
+    scrollToResult();
+  }
+
+  function drawSurvivalChart(result, fixedWidth) {
+    const box = document.getElementById('survivalChart');
+    const color = GROUP_COLORS[result.groupIndex];
+    // The drawing is as wide as its box, so the axis labels keep their size on phones.
+    const W = fixedWidth || Math.round(Math.min(640, Math.max(280, box.clientWidth || 640)));
+    const H = W < 480 ? 240 : 300, m = {l: 56, r: 18, t: 14, b: 50};
+    const times = [0].concat(result.times), tMax = times[times.length - 1];
+    const x = t => m.l + (W - m.l - m.r) * t / tMax;
+    const y = v => m.t + (H - m.t - m.b) * (1 - v / 100);
+    const model = [100].concat(result.survival), km = [100].concat(result.groupSurvival);
+    const stage = result.stage ? [100].concat(result.stage.survival) : null;
+    const path = values => values.map((v, i) => (i ? 'L' : 'M') + x(times[i]).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Survival curve">`;
+    for (let v = 0; v <= 100; v += 20) {
+      s += `<line x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}" stroke="#e2e8f0"/>` +
+           `<text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end" class="ax">${v}</text>`;
+    }
+    times.forEach(t => {
+      s += `<line x1="${x(t)}" x2="${x(t)}" y1="${m.t}" y2="${H - m.b}" stroke="#f1f5f9"/>` +
+           `<text x="${x(t)}" y="${H - m.b + 18}" text-anchor="middle" class="ax">${t}</text>`;
+    });
+    s += `<text x="${(m.l + W - m.r) / 2}" y="${H - 6}" text-anchor="middle" class="axt">Months since diagnosis</text>`;
+    s += `<text transform="translate(14 ${(m.t + H - m.b) / 2}) rotate(-90)" text-anchor="middle" class="axt">Overall survival (%)</text>`;
+    s += `<path d="${path(model)} L${x(tMax)},${y(0)} L${x(0)},${y(0)} Z" fill="${color}" fill-opacity="0.12"/>`;
+    s += `<path d="${path(km)}" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 5"/>`;
+    if (stage) s += `<path d="${path(stage)}" fill="none" stroke="#4f46e5" stroke-width="2" stroke-dasharray="2 4" stroke-linecap="round"/>`;
+    s += `<path d="${path(model)}" fill="none" stroke="${color}" stroke-width="3"/>`;
+    km.forEach((v, i) => { s += `<circle cx="${x(times[i])}" cy="${y(v)}" r="4" fill="white" stroke="#94a3b8" stroke-width="2"><title>Training patients in the same risk group, ${times[i]} months: ${formatPercent(v)}</title></circle>`; });
+    if (stage) stage.forEach((v, i) => { s += `<circle cx="${x(times[i])}" cy="${y(v)}" r="3.5" fill="white" stroke="#4f46e5" stroke-width="2"><title>Training patients with the same summary stage, ${times[i]} months: ${formatPercent(v)}</title></circle>`; });
+    model.forEach((v, i) => { s += `<circle cx="${x(times[i])}" cy="${y(v)}" r="5" fill="white" stroke="${color}" stroke-width="2.5"><title>Estimate, ${times[i]} months: ${formatPercent(v)}</title></circle>`; });
+    s += '</svg><div class="chart-legend">' +
+         `<span><i style="background:${color}"></i>Estimate from the score</span>` +
+         '<span><i class="dash"></i>Training patients in the same risk group (Kaplan&ndash;Meier)</span>' +
+         (stage ? '<span><i class="dot"></i>Training patients with the same summary stage (Kaplan&ndash;Meier)</span>' : '') + '</div>';
+    box.innerHTML = s;
+  }
+
+  try { buildForm(getModelSpec()); } catch (error) { showError(error); }
+</script>
+</body>
+</html>
