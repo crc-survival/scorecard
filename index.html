@@ -20,6 +20,8 @@
        limitations and privacy.
        2026-11-09: the observed and estimated 36-month survival of the Thai cohort in the About section come from the
        newest outputs_external run (rerun with the corrected age groups), not from text in this file.
+       2026-11-09 (evening): the model version (date and run folders) is no longer shown under the result or in the
+       printed report; it stays in MODEL.version in the page source.
        2026-11-08: the banner, disclaimer and About section describe the external evaluation in 99 patients from a
        hospital in Thailand (ranked risk well, overestimated survival; manuscript Section 3.6) instead of "not
        externally validated".
@@ -299,7 +301,6 @@
           alive <span class="landmark-months">3</span> months after diagnosis; time from diagnosis to treatment is not used
           as a predictor, and the points for treatment are not treatment effects. The tool has been evaluated in only one small
           external cohort, where it overestimated survival, and is not a substitute for clinical judgment.
-          <span id="modelVersion"></span>
         </div>
       </div>
     </div>
@@ -1049,7 +1050,6 @@ function calculateRisk(formData) {
       `<button type="button" class="btn-test g${i}" onclick="fillExample('${escapeHtml(g.name)}')">${escapeHtml(g.name)}
          <small>(Score ${g.min}&ndash;${g.max})</small></button>`).join('');
     document.getElementById('display-max').innerText = '/ ' + spec.theoreticalMax;
-    document.getElementById('modelVersion').innerText = 'Model version ' + spec.version + '.';
     document.getElementById('submitBtn').disabled = false;
     document.querySelectorAll('.landmark-months').forEach(e => { e.textContent = spec.landmarkMonths; });
     buildAbout(spec);
