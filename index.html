@@ -20,7 +20,11 @@
        limitations and privacy.
        2026-11-08: the banner, disclaimer and About section describe the external evaluation in 99 patients from a
        hospital in Thailand (ranked risk well, overestimated survival; manuscript Section 3.6) instead of "not
-       externally validated". -->
+       externally validated".
+       2026-11-09: estimates come from the 3-month landmark model of notebook 10 (independent review, major comment 1):
+       survival 12, 24 and 36 months later for patients alive 3 months after diagnosis, when the first course of
+       treatment is known; points and risk groups unchanged. Texts naming the landmark carry class "landmark-months",
+       filled from the model; the About section gives the time to first treatment and the landmark test results. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -212,14 +216,15 @@
   <div class="print-header"><b>Colorectal Cancer Survival Scorecard</b> (research prototype). Printed <span id="printDate"></span>.</div>
   <div class="header">
     <h1>Colorectal Cancer <span>Scorecard</span></h1>
-    <p>Points-based risk groups and estimated overall survival from 12 to 48 months after diagnosis</p>
+    <p>Points-based risk groups and estimated overall survival for patients alive <span class="landmark-months">3</span> months after diagnosis</p>
   </div>
   <div class="prototype-banner">
     <b>Research prototype for researchers, not for clinical decisions or for use by patients.</b> The scorecard was developed on patients diagnosed with
     colorectal cancer in 2018 in the Surveillance, Epidemiology, and End Results (SEER) cancer registries of the United States.
     In a first external evaluation, in 99 patients from a hospital in Thailand, it ranked patients by risk well but
     overestimated survival; further external validation is needed. Surgery and chemotherapy are inputs, so it applies
-    once the first course of treatment is known. Estimates describe groups of similar patients, not an individual prognosis.
+    once the first course of treatment is known, and its estimates are for patients alive <span class="landmark-months">3</span> months
+    after diagnosis. Estimates describe groups of similar patients, not an individual prognosis.
   </div>
 
   <div class="layout-grid">
@@ -265,18 +270,19 @@
 
         <div class="result-white-box">
           <div class="section-title-modern">Estimated overall survival</div>
-          <p class="section-sub">Probability of being alive (death from any cause) at each time, counted from the date of
-            diagnosis, estimated from the score.</p>
+          <p class="section-sub">Probability of being alive (death from any cause) at each time, counted from
+            <span class="landmark-months">3</span> months after diagnosis, for patients alive then, estimated from the score.</p>
           <div class="survival-grid-modern" id="survivalCards"></div>
           <div class="compare-box">
-            <div class="compare-title">For comparison: observed survival of training patients</div>
+            <div class="compare-title">For comparison: observed survival of training patients alive <span class="landmark-months">3</span> months after diagnosis</div>
             <table class="compare-table" id="compareTable"></table>
           </div>
           <div class="section-title-modern" style="margin-top: 32px;">Survival curve</div>
           <div id="survivalChart" class="chart-box"></div>
           <p class="chart-note">Solid line: estimate from the score (Cox model with the total score as its only predictor,
-            fitted to the training patients). Dashed and dotted lines: observed Kaplan&ndash;Meier survival of training
-            patients in the same risk group and with the same summary stage.</p>
+            fitted to the training patients alive <span class="landmark-months">3</span> months after diagnosis, with time
+            counted from then). Dashed and dotted lines: observed Kaplan&ndash;Meier survival of those patients in the same
+            risk group and with the same summary stage.</p>
           <details class="breakdown-details" open>
             <summary>Score breakdown (largest contributions first)</summary>
             <table class="breakdown-table">
@@ -287,8 +293,9 @@
         </div>
         <div class="disclaimer-box">
           Research prototype. Predictors are recorded at diagnosis or describe the first course of treatment as coded in the
-          registry, so the scorecard applies once the first course of treatment is known; time from diagnosis to treatment is
-          not used, and the points for treatment are not treatment effects. The tool has been evaluated in only one small
+          registry, so the scorecard applies once the first course of treatment is known, and its estimates are for patients
+          alive <span class="landmark-months">3</span> months after diagnosis; time from diagnosis to treatment is not used
+          as a predictor, and the points for treatment are not treatment effects. The tool has been evaluated in only one small
           external cohort, where it overestimated survival, and is not a substitute for clinical judgment.
           <span id="modelVersion"></span>
         </div>
@@ -311,11 +318,11 @@
 </div>
 
 <script>
-// Scorecard model and calculations. Generated by build_webapp.py on 2026-11-08 from:
-//   outputs_v2/20261105_141907_240841/shap_scorecard_legacy/20261106_092408_941360/scorecard_web_model.json
+// Scorecard model and calculations. Generated by build_webapp.py on 2026-11-09 from:
+//   outputs_v2/20261105_141907_240841/landmark_scorecard/20261109_114733_734895/landmark_web_model.json
 // Do not edit by hand: rerun notebook 6, export the JSON again and rerun build_webapp.py.
 const MODEL = {
-  "version": "2026-11-05 (20261106_092408_941360)",
+  "version": "2026-11-09 (20261106_092408_941360; landmark model 20261109_114733_734895)",
   "features": [
     "Age",
     "Derived_M",
@@ -537,51 +544,47 @@ const MODEL = {
     46
   ],
   "theoretical_max": 100,
-  "beta": 0.06904673936006046,
+  "beta": 0.06936649651029386,
   "times": [
     12,
     24,
-    36,
-    48
+    36
   ],
+  "landmarkMonths": 3,
   "baseline": {
-    "12": 0.9876600210111782,
-    "24": 0.9765834660417695,
-    "36": 0.9645132509243445,
-    "48": 0.9520446276305886
+    "12": 0.9904114916485802,
+    "24": 0.9789858266249261,
+    "36": 0.9666947042417791
   },
   "groupSurvival": {
     "Low Risk": {
-      "12": 0.9707492878103408,
-      "24": 0.9389836372714859,
-      "36": 0.9083782701080347,
-      "48": 0.8708752463564591
+      "12": 0.9774174699645379,
+      "24": 0.9440965763801706,
+      "36": 0.9097300723333408
     },
     "Intermediate Risk": {
-      "12": 0.857672120867973,
-      "24": 0.7642614102423468,
-      "36": 0.6518561749940004,
-      "48": 0.5628280014140904
+      "12": 0.892763837715895,
+      "24": 0.7852640697241873,
+      "36": 0.6703231740421811
     },
     "High Risk": {
-      "12": 0.49903686695189553,
-      "24": 0.2850188574617115,
-      "36": 0.18558209141527182,
-      "48": 0.12794790153475258
+      "12": 0.596889941426975,
+      "24": 0.35152237333805963,
+      "36": 0.23434546148777274
     }
   },
   "groupCounts": {
     "Low Risk": {
-      "n": 2852,
-      "events": 400
+      "n": 2805,
+      "events": 364
     },
     "Intermediate Risk": {
-      "n": 2018,
-      "events": 926
+      "n": 1880,
+      "events": 797
     },
     "High Risk": {
-      "n": 913,
-      "events": 805
+      "n": 671,
+      "events": 566
     }
   },
   "examples": {
@@ -675,53 +678,48 @@ const MODEL = {
   ],
   "stageSurvival": {
     "1": {
-      "n": 1058,
-      "events": 836,
+      "n": 844,
+      "events": 624,
       "survival": {
-        "12": 0.6021891402250774,
-        "24": 0.41038098110635635,
-        "36": 0.2961778379231326,
-        "48": 0.2183939105175073
+        "12": 0.6912785618643266,
+        "24": 0.4809090957878332,
+        "36": 0.349622786334924
       }
     },
     "2": {
-      "n": 2229,
-      "events": 503,
+      "n": 2147,
+      "events": 434,
       "survival": {
-        "12": 0.9350124504204764,
-        "24": 0.8901649467482925,
-        "36": 0.8394501969610699,
-        "48": 0.7902625044131462
+        "12": 0.9531629636500534,
+        "24": 0.9067763314812766,
+        "36": 0.853409565168678
       }
     },
     "3": {
-      "n": 930,
-      "events": 344,
+      "n": 881,
+      "events": 299,
       "survival": {
-        "12": 0.8790606214312366,
-        "24": 0.7940114184863449,
-        "36": 0.7192647994858188,
-        "48": 0.6524369216182836
+        "12": 0.9090180736487674,
+        "24": 0.8103640246056317,
+        "36": 0.7349351519525933
       }
     },
     "4": {
-      "n": 814,
-      "events": 251,
+      "n": 757,
+      "events": 195,
       "survival": {
-        "12": 0.8856019668861159,
-        "24": 0.823498423050757,
-        "36": 0.7517527380655469,
-        "48": 0.7084966920320278
+        "12": 0.9351033040990869,
+        "24": 0.8641741713599064,
+        "36": 0.7909791718163961
       }
     },
     "5": {
-      "n": 752,
-      "events": 197,
+      "n": 727,
+      "events": 175,
       "survival": {
-        "12": 0.9250982931340753,
-        "24": 0.8697358003594464,
-        "36": 0.8124945896176669,
-        "48": 0.745639133972158
+        "12": 0.9377612154966755,
+        "24": 0.8791970084030414,
+        "36": 0.818603277426721
       }
     }
   },
@@ -731,46 +729,59 @@ const MODEL = {
       "train_n": 5783,
       "train_deaths": 2131,
       "test_n": 1446,
-      "test_deaths": 533
+      "test_deaths": 533,
+      "landmark_months": 3,
+      "landmark_train_n": 5356,
+      "landmark_train_deaths": 1727
+    },
+    "treatment": {
+      "within_percent": "97.4",
+      "n": 6910,
+      "median_days": "18"
     },
     "performance": {
-      "source": "20261106_114601_980119",
-      "time": 48,
+      "source": "20261109_114733_734895",
+      "time": 36,
+      "first_time": 12,
+      "test_n": 1328,
+      "test_deaths": 422,
       "c_index": [
-        "0.799",
         "0.781",
-        "0.819"
+        "0.761",
+        "0.802"
       ],
-      "ibs": "0.1260",
-      "c_tnm": "0.717",
-      "c_age_tnm": "0.777",
-      "c_cox_all": "0.801",
+      "ibs": "0.1154",
+      "observed_expected_first": [
+        "1.21",
+        "1.04",
+        "1.41"
+      ],
       "observed_expected": [
-        "1.01",
-        "0.94",
-        "1.08"
+        "1.04",
+        "0.95",
+        "1.14"
       ],
       "groups": [
         {
           "name": "Low Risk",
-          "n": 706,
-          "deaths": 95,
-          "observed": 87.3,
-          "predicted": 85.2
+          "n": 695,
+          "deaths": 89,
+          "observed": 91.0,
+          "predicted": 89.5
         },
         {
           "name": "Intermediate Risk",
-          "n": 513,
-          "deaths": 239,
-          "observed": 55.5,
-          "predicted": 59.4
+          "n": 477,
+          "deaths": 205,
+          "observed": 65.0,
+          "predicted": 69.5
         },
         {
           "name": "High Risk",
-          "n": 227,
-          "deaths": 199,
-          "observed": 13.0,
-          "predicted": 12.0
+          "n": 156,
+          "deaths": 128,
+          "observed": 22.9,
+          "predicted": 24.1
         }
       ]
     }
@@ -812,7 +823,8 @@ function getModelSpec() {
   return {version: MODEL.version, features: MODEL.features, names: MODEL.names, options: options,
           continuous: MODEL.continuous, times: MODEL.times, theoreticalMax: MODEL.theoretical_max,
           groups: groupRanges_(), groupCounts: MODEL.groupCounts, examples: MODEL.examples,
-          pointsTable: pointsTable, beta: MODEL.beta, baseline: MODEL.baseline, about: MODEL.about};
+          pointsTable: pointsTable, beta: MODEL.beta, baseline: MODEL.baseline, about: MODEL.about,
+          landmarkMonths: MODEL.landmarkMonths};
 }
 
 function pointsKey_(feature, raw) {
@@ -868,7 +880,7 @@ function calculateRisk(formData) {
   }
   return {
     score: score, maxScore: MODEL.theoretical_max, groupIndex: groupIndex, group: groupRanges_()[groupIndex],
-    times: MODEL.times,
+    times: MODEL.times, landmarkMonths: MODEL.landmarkMonths,
     survival: MODEL.times.map(function (t) { return 100 * Math.pow(MODEL.baseline[String(t)], relativeHazard); }),
     groupSurvival: MODEL.times.map(function (t) { return 100 * MODEL.groupSurvival[GROUPS[groupIndex]][String(t)]; }),
     groupCount: MODEL.groupCounts[GROUPS[groupIndex]], stage: stage,
@@ -1030,6 +1042,7 @@ function calculateRisk(formData) {
     document.getElementById('display-max').innerText = '/ ' + spec.theoreticalMax;
     document.getElementById('modelVersion').innerText = 'Model version ' + spec.version + '.';
     document.getElementById('submitBtn').disabled = false;
+    document.querySelectorAll('.landmark-months').forEach(e => { e.textContent = spec.landmarkMonths; });
     buildAbout(spec);
   }
 
@@ -1038,14 +1051,18 @@ function calculateRisk(formData) {
   function buildAbout(spec) {
     const fmt = n => Number(n).toLocaleString('en-US');
     const pct = v => Number(v).toFixed(1) + '%';
-    const about = spec.about || {}, pop = about.population, perf = about.performance;
+    const about = spec.about || {}, pop = about.population, perf = about.performance, treat = about.treatment;
+    const L = spec.landmarkMonths, list = a => a.join(', ').replace(/, ([^,]+)$/, ' and $1');
     let h = '<h4>Who it is for</h4><p>Researchers studying prognosis in colorectal cancer. After further external validation, it may ' +
       'help clinicians discuss prognosis with patients whose first course of treatment is known. It is not for clinical ' +
       'decisions, for choosing or comparing treatments, or for use by patients.</p>';
-    h += '<h4>What it estimates</h4><p>Overall survival: the probability of being alive (death from any cause) at ' +
-      spec.times.join(', ').replace(/, (\d+)$/, ' and $1') + ' months after the date of diagnosis, for groups of patients like ' +
-      'the one entered. The total score is converted to survival with a Cox regression that has the score as its only ' +
-      'predictor, fitted to the training patients.</p>';
+    h += '<h4>What it estimates</h4><p>Overall survival: the probability of being alive (death from any cause) ' +
+      `${list(spec.times)} months later, for patients alive ${L} months after diagnosis, when the first course of ` +
+      'treatment is usually known' + (treat ? ` (${treat.within_percent}% of treated patients in the registry had started ` +
+      `treatment by then, a median of ${treat.median_days} days after diagnosis)` : '') + ', for groups of patients like the one entered. The ' +
+      'total score is converted to survival with a Cox regression that has the score as its only predictor, fitted to the ' +
+      (pop && pop.landmark_train_n ? `${fmt(pop.landmark_train_n)} ` : '') +
+      `training patients alive ${L} months after diagnosis, with time counted from then.</p>`;
     if (pop) {
       h += `<h4>Study population</h4><p>${fmt(pop.n)} patients diagnosed with colorectal cancer in 2018 in the Surveillance, ` +
         'Epidemiology, and End Results (SEER) cancer registries of the United States, followed from diagnosis until death or ' +
@@ -1055,22 +1072,25 @@ function calculateRisk(formData) {
         `${fmt(pop.test_deaths)} deaths), used only to check it.</p>`;
     }
     if (perf) {
-      h += '<h4>Performance in the test set</h4><ul>' +
+      const ratio = (r, t) => `${r[0]} times the predicted risk at ${t} months (95% confidence interval ${r[1]} to ${r[2]})`;
+      h += `<h4>Performance in the test set</h4><p>Test patients alive ${L} months after diagnosis: ${fmt(perf.test_n)} ` +
+        `patients, ${fmt(perf.test_deaths)} deaths.</p><ul>` +
         `<li>Ranking of patients by risk (concordance index; 1 is perfect, 0.5 is chance): ${perf.c_index[0]} (95% confidence ` +
-        `interval ${perf.c_index[1]} to ${perf.c_index[2]}), against ${perf.c_tnm} for a Cox regression with the tumor, node ` +
-        `and metastasis categories and ${perf.c_age_tnm} with age group added, and similar to a Cox regression with all 26 ` +
-        `candidate predictors (${perf.c_cox_all}).</li>` +
-        `<li>Prediction error from 12 to ${perf.time} months (integrated Brier score; lower is better): ${perf.ibs}.</li>` +
-        `<li>Calibration at ${perf.time} months: the observed risk of death was ${perf.observed_expected[0]} times the predicted ` +
-        `risk (95% confidence interval ${perf.observed_expected[1]} to ${perf.observed_expected[2]}).</li>` +
-        `<li>Observed (predicted) survival at ${perf.time} months by risk group: ` +
+        `interval ${perf.c_index[1]} to ${perf.c_index[2]}).</li>` +
+        `<li>Prediction error from ${perf.first_time} to ${perf.time} months later (integrated Brier score; lower is better): ` +
+        `${perf.ibs}.</li>` +
+        `<li>Calibration: the observed risk of death was ${ratio(perf.observed_expected_first, perf.first_time)}` +
+        (Number(perf.observed_expected_first[1]) > 1 ? ', so the risk in that period was underestimated,' : '') +
+        ` and ${ratio(perf.observed_expected, perf.time)}.</li>` +
+        `<li>Observed (predicted) survival ${perf.time} months later by risk group: ` +
         perf.groups.map(g => `${escapeHtml(g.name)} ${pct(g.observed)} (${pct(g.predicted)}), ${fmt(g.n)} patients`).join('; ') +
         '.</li></ul>';
     }
     const baseline = spec.times.map(t => Number(spec.baseline[String(t)]).toFixed(4));
     h += '<h4>From score to survival</h4><p>Survival at each time is the baseline survival at that time raised to the power ' +
       `e<sup>${Number(spec.beta).toFixed(4)} × total score</sup>, with baseline survival ${baseline.join(', ')} at ` +
-      `${spec.times.join(', ')} months (rounded here; the page uses the unrounded values). Risk groups: ` +
+      `${spec.times.join(', ')} months from ${L} months after diagnosis (rounded here; the page uses the unrounded ` +
+      'values). Risk groups: ' +
       spec.groups.map(g => `${escapeHtml(g.name)} ${g.min}–${g.max} points`).join(', ') +
       ' (cut-offs chosen in the training set).</p>';
     h += `<h4>Points table</h4><p>The total score is the sum of the points of the ${spec.features.length} predictors ` +
@@ -1084,8 +1104,11 @@ function calculateRisk(formData) {
     h += '<h4>Main limitations</h4><ul>' +
       '<li>Limited external validation. It was developed on registry data from the United States for patients diagnosed in ' +
       '2018. In 99 patients from a hospital in Thailand it ranked patients by risk well, but their survival was lower than ' +
-      'estimated (at 36 months, 48.6% observed versus 66.4% estimated), so the estimates may need recalibration in other ' +
-      'countries and periods, where treatment and survival may differ.</li>' +
+      'estimated (36 months after diagnosis, 48.6% observed versus 66.4% estimated), so the estimates may need ' +
+      'recalibration in other countries and periods, where treatment and survival may differ.</li>' +
+      '<li>The registry records when the first treatment started but not when chemotherapy started, so some treatment ' +
+      `may begin after ${L} months` + (treat ? ` (${treat.within_percent}% of treated patients had started treatment by then)` : '') +
+      '.</li>' +
       '<li>The registry has no information on other illnesses or fitness, so the points for treatment describe who was ' +
       'treated and are not treatment effects.</li>' +
       '<li>Points for small categories are imprecise, and some points reflect how the registry records data (age 15–29 ' +
@@ -1213,7 +1236,7 @@ function calculateRisk(formData) {
       s += `<line x1="${x(t)}" x2="${x(t)}" y1="${m.t}" y2="${H - m.b}" stroke="#f1f5f9"/>` +
            `<text x="${x(t)}" y="${H - m.b + 18}" text-anchor="middle" class="ax">${t}</text>`;
     });
-    s += `<text x="${(m.l + W - m.r) / 2}" y="${H - 6}" text-anchor="middle" class="axt">Months since diagnosis</text>`;
+    s += `<text x="${(m.l + W - m.r) / 2}" y="${H - 6}" text-anchor="middle" class="axt">Months from ${result.landmarkMonths} months after diagnosis</text>`;
     s += `<text transform="translate(14 ${(m.t + H - m.b) / 2}) rotate(-90)" text-anchor="middle" class="axt">Overall survival (%)</text>`;
     s += `<path d="${path(model)} L${x(tMax)},${y(0)} L${x(0)},${y(0)} Z" fill="${color}" fill-opacity="0.12"/>`;
     s += `<path d="${path(km)}" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 5"/>`;
